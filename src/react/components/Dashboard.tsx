@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Grid,
@@ -13,24 +13,250 @@ import {
   Alert,
   CircularProgress,
   useTheme,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import {
   useLatestProtocolStats,
   useProtocolStatsHistory,
 } from "../hooks/useProtocolStats";
 import { useLatestCdpMetrics } from "../hooks/useCdpMetrics";
-import { useLatestTVLMetrics } from "../hooks/useTvlMetrics";
+import { useLatestTVLMetrics, useTVLMetricsHistory } from "../hooks/useTvlMetrics";
 import { MetricCard } from "./common/MetricCard";
 import { TVLChart } from "./charts/TVLChart";
 import { formatCurrency } from "../../utils/formatters";
 import { Link } from "react-router-dom";
 import { useContractMapping } from "../../contexts/ContractMappingContext";
 
+interface AssetDetailAccordionProps {
+  asset: string;
+  row: any;
+  expanded: boolean;
+  onChange: (event: React.SyntheticEvent, isExpanded: boolean) => void;
+  dateParams: { start_time: string; end_time: string };
+}
+
+function AssetDetailAccordion({
+  asset,
+  row,
+  expanded,
+  onChange,
+  dateParams,
+}: AssetDetailAccordionProps) {
+  const theme = useTheme();
+
+  // Fetch historical data for this asset
+  const { data: assetHistory, isLoading: assetHistoryLoading } =
+    useTVLMetricsHistory(asset, dateParams, {
+      enabled: expanded, // Only fetch when expanded
+    });
+
+  return (
+    <Accordion
+      expanded={expanded}
+      onChange={onChange}
+      sx={{
+        mb: 2,
+        borderRadius: "var(--radius-md)",
+        "&:before": { display: "none" },
+        boxShadow: "none",
+        border: `1px solid ${theme.palette.divider}`,
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        sx={{
+          borderRadius: "var(--radius-md)",
+          "&.Mui-expanded": {
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+          },
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            mr: 2,
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {asset}
+          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              gap: 3,
+              alignItems: "center",
+            }}
+          >
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                TVL
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {formatCurrency(row.tvl, 14, 2, "USD")}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                Market Cap
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {formatCurrency(row.marketCap, 14, 2, "USD")}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                Protocol Share
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {row.collateralRatio
+                  ? `${formatCurrency(row.collateralRatio, 0, 2, "%")}`
+                  : "N/A"}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails
+        sx={{
+          pt: 3,
+          pb: 4,
+          px: 3,
+        }}
+      >
+        {/* Supply over time chart */}
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            borderRadius: "var(--radius-md)",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Supply over time
+            </Typography>
+            {/* Simplified time selector - could be enhanced later */}
+            <Typography variant="caption" color="text.secondary">
+              30d
+            </Typography>
+          </Box>
+          <TVLChart
+            data={assetHistory || []}
+            type="asset"
+            assetSymbol={asset}
+            isLoading={assetHistoryLoading}
+            showTitle={false}
+          />
+        </Paper>
+
+        {/* Two-column layout: Collateralization and Stability Pools */}
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Paper
+              sx={{
+                p: 3,
+                borderRadius: "var(--radius-md)",
+                height: "100%",
+              }}
+            >
+              <Typography
+                variant="subtitle1"
+                sx={{ fontWeight: 600, mb: 2 }}
+              >
+                Collateralization
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Collateral Locked
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {formatCurrency(row.deposits, 7, 2, "XLM")}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Debt Minted
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {formatCurrency(row.minted, 7, 2, asset)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Global Ratio
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {row.collateralRatio
+                      ? formatCurrency(row.collateralRatio, 0, 2, "%")
+                      : "N/A"}
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Paper
+              sx={{
+                p: 3,
+                borderRadius: "var(--radius-md)",
+                height: "100%",
+              }}
+            >
+              <Typography
+                variant="subtitle1"
+                sx={{ fontWeight: 600, mb: 2 }}
+              >
+                Stability Pools
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Deposited
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {formatCurrency(row.minted, 7, 2, asset)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    APY
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {/* Placeholder - real APY data not available in current hooks */}
+                    11%
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
 export default function Dashboard() {
   const theme = useTheme();
   const contractMapping = useContractMapping();
   const assetSymbols = Object.keys(contractMapping);
+  const [expandedAsset, setExpandedAsset] = useState<string | false>(false);
 
   const dateParams = useMemo(
     () => ({
@@ -154,6 +380,37 @@ export default function Dashboard() {
           </Grid>
         ))}
       </Grid>
+
+      {/* Asset Details Accordions */}
+      <Box sx={{ mb: 4 }}>
+        {cdpRows.map((row) => {
+          const handleAccordionChange = (asset: string) => (
+            _event: React.SyntheticEvent,
+            isExpanded: boolean
+          ) => {
+            setExpandedAsset(isExpanded ? asset : false);
+          };
+
+          if (row.error) {
+            return (
+              <Alert severity="error" key={row.asset} sx={{ mb: 2 }}>
+                Failed to load data for {row.asset}
+              </Alert>
+            );
+          }
+
+          return (
+            <AssetDetailAccordion
+              key={row.asset}
+              asset={row.asset}
+              row={row}
+              expanded={expandedAsset === row.asset}
+              onChange={handleAccordionChange(row.asset)}
+              dateParams={dateParams}
+            />
+          );
+        })}
+      </Box>
 
       {/* CDP Table */}
       {/*
